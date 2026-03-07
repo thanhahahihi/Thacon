@@ -39,7 +39,8 @@ class scope:
         self.command=list()
 
     def check_new(char:str):
-        if('a'<=char<='z' or 'A'<=char<='Z' or '0'<=char<='9' or char in '\'\"()[]{}'):
+        res=False
+        if('a'<=char<='z' or 'A'<=char<='Z' or '0'<=char<='9' or char in '\'\"(['):
             res=True
         return res
     
@@ -56,16 +57,20 @@ class scope:
             express=' '
         def chung(char):
             nonlocal express
-            if(express[-1]==' '):
-                if(scope.check_new(char)):
+            if(scope.check_new(char)):
+                if(express[-1]==' '):
                     add()
             if(char in '\'\"[('):
                 stack.append(char)
             express+=char
+        def check_stack():
+            nonlocal express
+            if(len(stack)==0):
+                express+=' '
         for char in content:
             if(len(stack)==0):
                 if(char=='{'):
-                    scope_stack[-1].append(scope(express))
+                    scope_stack[-1].append(scope(express.strip()))
                     scope_stack.append(scope_stack[-1][-1].command)
                     express=' '
                 elif(char=='}'):
@@ -76,42 +81,109 @@ class scope:
                     scope_stack[-1].append(char)
                 elif(char=='\n'):
                     add()
-                elif(char==' '):
-                    if(scope.check_new(express[-1])):
-                        express+=char
                 else:
                     chung(char)
-            elif(stack[-1] in '\'\"'):
-                if(char==stack[-1]):
-                    if(express[-1]!='\\'):
-                        stack.pop()
-                express+=char
-            elif(char==']'):
-                if(stack[-1]=='['):
-                    stack.pop()
-                else:
-                    return Exception("scope error")
-                express+=char
-            elif(char==')'):
-                if(stack[-1]=='('):
-                    stack.pop()
-                else:
-                    return Exception("scope error")
-                express+=char
-            elif(char=='}'):
-                if(stack[-1]=='{'):
-                    stack.pop()
-                else:
-                    return Exception("scope error")
-                express+=char
             else:
-                chung(char)
+                express+=char
+                if(stack[-1] in '\'\"'):
+                    if(char==stack[-1]):
+                        if(express[-1]!='\\'):
+                            stack.pop()
+                elif(char==']'):
+                    if(stack[-1]=='['):
+                        stack.pop()
+                    else:
+                        return Exception("scope error")
+                elif(char==')'):
+                    if(stack[-1]=='('):
+                        stack.pop()
+                    else:
+                        return Exception("scope error")
+                elif(char=='}'):
+                    if(stack[-1]=='{'):
+                        stack.pop()
+                    else:
+                        return Exception("scope error")
+                elif(char in '\'\"{[('):
+                    stack.append(char)
+                check_stack()
         add()
 
 
     def __repr__(self):
         if(self.expression!=None):
             return F"{self.expression}:{list(self.command)}"
+    
+    def generate_python(self,prefix:str='')->str:
+        res=""
+        if(self.expression!=None):
+            res+=prefix+F"for _ in range({self.expression}):\n"
+            prefix+='\t'
+        for cmd in self.command:
+            if(type(cmd)==str):
+                if(cmd==','):
+                    res+=prefix+"file.write(' ')\n"
+                elif(cmd==';'):
+                    res+=prefix+"file.write('\\n')\n"
+                else:
+                    res+=prefix+F"file.write(str({cmd}))\n"
+            elif(type(cmd)==scope):
+                res+=cmd.generate_python(prefix)
+
+        return res
+
+
+class subtask:
+    def __init__(self,ls:scope):
+        self.ratio=ls.expression
+        self.funcs={}
+        for express in ls.command:
+            if(type(express)!=str):
+                return Exception("subtask error")
+            i=express.find('=')
+            if(i<1):continue
+            name=express[0:i]
+            express=express[i+1:]
+            i=0
+            stack=[]
+            while(i<len(express)):
+                if(express[i]==':'):
+                    if(len(stack)==0):break
+                elif(express[i] in '{[('):
+                    stack.append(express[i])
+                elif(express[i]=='}'):
+                    if(stack[-1]=='{'):
+                        stack.pop()
+                    else:
+                        return Exception("scope error")
+                elif(express[i]==']'):
+                    if(stack[-1]=='['):
+                        stack.pop()
+                    else:
+                        return Exception("scope error")
+                elif(express[i]==')'):
+                    if(stack[-1]=="("):
+                        stack.pop()
+                    else:
+                        return Exception("scope error")
+                elif(express[i] in '\'\"'):
+                    if(len(stack)>0):
+                        if(stack[-1]==express[i]):
+                            if(express[i-1]!='\\'):
+                                stack.pop()
+                    else:
+                        stack.append(express[i])
+                i+=1
+            if(i<len(express)):
+                self.funcs[name]=F"lamdba:random.ranint({express[0:i]},{express[i+1:]})"
+            else:
+                self.funcs[name]=F"lamdba:{express}"
+    def __repr__(self):
+        return F"{self.ratio}\n{self.funcs}"
+    
+    def embed(self,fundict:dict,prefix:str="gen"):
+        for key,value in self.funcs.items():
+            fundict[prefix+key]=eval(value,fundict)
 
 class generator:
     """
@@ -145,52 +217,6 @@ class generator:
                 i+=1
             # debugprint(F"{len(lines)}-{i}:{li}")
 
-    def parse_scope(conntent:str)->dict:
-        scope={}
-        stack=[]
-        scope_name=''
-        for char in conntent:
-            if(len(stack)==0):
-                if(char=='{'):
-                    stack.append('{')
-                    scope_name=scope_name.strip()
-                    scope[scope_name]=''
-                else:
-                    scope_name+=char
-            else:
-                if(stack[-1] in '\'\"'):
-                    if(char==stack[-1]):
-                        if(scope[scope_name][-1]!='\\'):
-                            stack.pop()
-                elif(char=='}'):
-                    if(stack[-1]=='{'):
-                        stack.pop()
-                        if(len(stack)==0):
-                            scope_name=''
-                            continue
-                    else:
-                        
-                        print(F"{colorama.Fore.RED}scope error")
-                        exit(1)
-                elif(char in ']'):
-                    if(stack[-1]=='['):
-                        stack.pop()
-                    else:
-                        print(F"{colorama.Fore.RED}scope error")
-                        exit(1)
-                elif(char in ')'):
-                    if(stack[-1]=='('):
-                        stack.pop()
-                    else:
-                        print(F"{colorama.Fore.RED}scope error")
-                        exit(1)
-                elif(char in '\'\"{[('):
-                    stack.append(char)
-
-                scope[scope_name]+=char
-
-        return scope
-
     def load(self,FilenamOrContent:str):
         """
         Read the description from the file
@@ -212,6 +238,23 @@ class generator:
         sps.parse(content)
         self.generated_file=sps.command[0]
         debugprint(sps)
+        for cmds in sps.command:
+            if(type(cmds)==scope):
+                if(cmds.expression=="sub"):
+                    self.subtasks=[]
+                    for item in cmds.command:
+                        self.subtasks.append(subtask(item))
+                elif(cmds.expression=="lim"):
+                    cmds.expression="0"
+                    self.lim=subtask(cmds)
+                    cmds.expression="lim"
+                elif(cmds.expression=="struct"):
+                    cmds.expression=None
+                    self.maincode="\nimport random\n"+cmds.generate_python()
+                    cmds.expression="struct"
+        debugprint(self.lim)
+        debugprint(self.subtasks)
+        debugprint(self.maincode)
 
 
 

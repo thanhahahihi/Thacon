@@ -3,11 +3,13 @@ TREE\
 .INP
 str\
 uct{
-    n,A,cf,cm,m;
-    n{a,("kk");}
+    n,A,cf,cm,m;n-1 {a,("kk")a;}
+    l l
+    "ll""mm"[a+{}]
+
 }
 lim{
-    n=1:1e5,A=1:1e9,cf=0:1e3,cm=0:1e3,m=0:1e15
+    n=1:1e5,A=1:1e9,cf=0:1e3,cm=0:1e3,m=0:1e15,a=1:A
 }
 sub{
     #su\
