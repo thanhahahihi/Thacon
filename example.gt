@@ -1,0 +1,18 @@
+#test.gt
+TREE\
+.INP
+str\
+uct{
+    n,A,cf,cm,m;
+    n{a,("kk");}
+}
+lim{
+    n=1:1e5,A=1:1e9,cf=0:1e3,cm=0:1e3,m=0:1e15
+}
+sub{
+    #su\
+    btask1
+    0.3{n=1:100,m=1:100}
+    0.3{n=101:5e3}
+    0.4{}
+}
