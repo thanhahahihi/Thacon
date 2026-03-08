@@ -114,8 +114,14 @@ class scope:
         if(self.expression!=None):
             return F"{self.expression}:{list(self.command)}"
     
-    def generate_python(self,prefix:str='')->str:
+    def generate_python(self,prefix:str='',used_vars=[])->str:
+        R"""
+        brief:generate python code from description by scope
+        param prefix:the prefix string before the new python code('\t'*k)
+        param used_vars:list varianles have been used in parent scope
+        """
         res=""
+        cur_vars=[]#used variable name in this scope
         if(self.expression!=None):
             res+=prefix+F"for _ in range({self.expression}):\n"
             prefix+='\t'
@@ -134,7 +140,22 @@ class scope:
 
 
 class subtask:
+    '''
+    Subtask in competitive programing with each limits
+    '''
     def __init__(self,ls:scope):
+        '''
+        Constructor of subtask class
+        brief: initalize generator string from scope
+        syntax:
+        for each item of ls:
+            it contains a variable name with '=' operator
+            after '=' if the value contains ':' it will random from before ':' to after ':'
+            else it will be as normal python epression
+        for example:
+            a=10:1e9 is a=random.ranint(10,int(1e9)) in python
+            b=100 then b equall 100,which is a constant
+        '''
         self.ratio=ls.expression
         self.funcs={}
         for express in ls.command:
@@ -182,6 +203,10 @@ class subtask:
         return F"{self.ratio}\n{self.funcs}"
     
     def embed(self,fundict:dict,prefix:str="gen"):
+        '''
+        Function for write generator function for each variable in subtask
+        param:prefix ,which is prefix of function name
+        '''
         for key,value in self.funcs.items():
             fundict[prefix+key]=eval(value,fundict)
 
