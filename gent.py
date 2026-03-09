@@ -33,6 +33,22 @@ def debugprint(*content,**keys):
     print(F"{colorama.Fore.CYAN}debug:",*content,F"{colorama.Fore.CYAN}|",**keys)
     # print(F"{colorama.Fore.YELLOW}{"-"*20}")
 
+import ast
+class varvisitor(ast.NodeVisitor):
+    def __init__(self,usedvars:list):
+        super().__init__()
+        self.vars=[]
+        self.usedvarname=usedvars
+    def visit_Name(self, node):
+        if(not node.id in self.usedvarname):
+            self.usedvarname.append(node.id)
+            self.vars.append(node.id)
+
+    def __del__(self):
+        # self.usedvarname.remove()
+        for name in self.vars:
+            self.usedvarname.remove(name)
+
 class scope:
     def __init__(self,express:str="root"):
         self.expression=express
@@ -120,23 +136,53 @@ class scope:
         param prefix:the prefix string before the new python code('\t'*k)
         param used_vars:list varianles have been used in parent scope
         """
-        res=""
-        cur_vars=[]#used variable name in this scope
+        # res=""
+        cur_vars=varvisitor(used_vars)#used variable name in this scope
         if(self.expression!=None):
-            res+=prefix+F"for _ in range({self.expression}):\n"
+            precommand=prefix+F"for _ in range(int({self.expression})):\n"
             prefix+='\t'
+        else:
+            precommand=""
+        res=prefix+"file.write(F\""
+        def endwrite():
+            nonlocal res
+            if(res[-3:]=="(F\""):
+                pass
+                res=res[0:-13]+'\n'
+            else:
+                res+=F"\")\n"
         for cmd in self.command:
             if(type(cmd)==str):
                 if(cmd==','):
-                    res+=prefix+"file.write(' ')\n"
+                    res+=" "
                 elif(cmd==';'):
-                    res+=prefix+"file.write('\\n')\n"
+                    res+=F"\\n\"){prefix}file.write(F\""
+                    # endwrite()
                 else:
-                    res+=prefix+F"file.write(str({cmd}))\n"
+                    cmd=cmd.strip()
+                    res+="{"+cmd+"}"
+                    cur_vars.visit(ast.parse(cmd))
             elif(type(cmd)==scope):
-                res+=cmd.generate_python(prefix)
+                # res+="\")\n"
+                endwrite()
+                cur_vars.visit(ast.parse(cmd.expression.strip()))
+                res+=cmd.generate_python(prefix,used_vars)
+                res+=prefix+"file.write(F\""
+        # res+="\")\n"
+        endwrite()
+        if(len(cur_vars.vars)>0):
+            res+=prefix+"del "
+        precommand+=prefix
+        for name in cur_vars.vars:
+            precommand+=F"{name}=gen{name}();"
+            res+=F"{name},"
+        precommand=precommand[0:-1]+'\n'
+        res=res[0:-1]+'\n'
+        del cur_vars
+        return precommand+res
 
-        return res
+
+        
 
 
 class subtask:
@@ -156,7 +202,7 @@ class subtask:
             a=10:1e9 is a=random.ranint(10,int(1e9)) in python
             b=100 then b equall 100,which is a constant
         '''
-        self.ratio=ls.expression
+        self.ratio=float(eval(ls.expression))
         self.funcs={}
         for express in ls.command:
             if(type(express)!=str):
@@ -196,9 +242,9 @@ class subtask:
                         stack.append(express[i])
                 i+=1
             if(i<len(express)):
-                self.funcs[name]=F"lamdba:random.ranint({express[0:i]},{express[i+1:]})"
+                self.funcs[name]=F"lambda:random.randint(int({express[0:i]}),int({express[i+1:]}))"
             else:
-                self.funcs[name]=F"lamdba:{express}"
+                self.funcs[name]=F"lambda:{express}"
     def __repr__(self):
         return F"{self.ratio}\n{self.funcs}"
     
@@ -210,12 +256,16 @@ class subtask:
         for key,value in self.funcs.items():
             fundict[prefix+key]=eval(value,fundict)
 
+import subprocess
+import pathlib
 class generator:
     """
     Random input generator
     """
     def __init__(self):
-        pass
+        self.maincode:str=""#python code to write generated input
+        self.lim=subtask(scope("0"))#default limits of vars
+        self.subtasks=list[subtask]()#each limits per subtask
 
     def parse_minimal(lines:list[str]):
         """
@@ -279,7 +329,35 @@ class generator:
                     cmds.expression="struct"
         debugprint(self.lim)
         debugprint(self.subtasks)
-        debugprint(self.maincode)
+        debugprint("main code:"+self.maincode)
+    def generate(self,dir:str,num:int,cmd:str):
+        """
+        Generate inputs
+        param dir:  directory contains input folder
+        param num:  the number of test case
+        param cmd:  command to solve that input
+        """
+        cur_num=0
+        for sub in self.subtasks:
+            sandboxvars={}
+            self.lim.embed(sandboxvars)
+            sub.embed(sandboxvars)
+            for _ in range(int(sub.ratio*num)):
+                cur_num+=1
+                dirname=str(cur_num)
+                dirname="test"+'0'*(3-len(dirname))+dirname
+                debugprint(F"generating {dirname}")
+                dirname=dir+'/'+dirname
+                if(not pathlib.Path(dirname).exists()):
+                    os.mkdir(dirname)
+                sandboxvars["file"]=open(F"{dirname}/{self.generated_file}",'w')
+                exec(self.maincode,sandboxvars)
+                subprocess.run(
+                    cmd,
+                    shell=True,
+                    cwd=F"{dirname}"
+                )
+                sandboxvars['file'].close()
 
 
 
@@ -287,12 +365,22 @@ class generator:
 def main(arguments:list):
     parser=argparse.ArgumentParser()
     parser.add_argument("file",type=str,help="description file",default="example.gt")
-    parser.add_argument("-od",dest="outdir",default='.',type=str,help="output directory (default: .)")
-    parser.add_argument('-n',dest="num",help="the numbar of input",default=1,type=int)
+    parser.add_argument("-od",dest="outdir",default=None,type=str,help="output directory (default: .)")
+    parser.add_argument('-n',dest="num",help="the numbar of input",default=10,type=int)
     parser.add_argument("-c",dest="command",default="echo created successfully",help="command to solve",type=str)
     config=parser.parse_args(arguments)
     maingen=generator()
     maingen.load(config.file)
+    if(config.outdir==None):
+        i=max(config.file.rfind('/'),config.file.rfind('\\'))
+        debugprint(i)
+        if(i==-1):
+            config.outdir='.'
+        else:
+            config.outdir=config.file[0:i]
+        
+        # exit(0)
+    maingen.generate(dir=config.outdir,num=config.num,cmd=config.command)
 
 if(__name__=="__main__"):
     main(sys.argv[1:])
