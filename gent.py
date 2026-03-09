@@ -30,6 +30,7 @@ import colorama
 colorama.init(autoreset=True)
 
 def debugprint(*content,**keys):
+    return
     print(F"{colorama.Fore.CYAN}debug:",*content,F"{colorama.Fore.CYAN}|",**keys)
     # print(F"{colorama.Fore.YELLOW}{"-"*20}")
 
