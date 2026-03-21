@@ -157,7 +157,7 @@ class scope:
                 if(cmd==','):
                     res+=" "
                 elif(cmd==';'):
-                    res+=F"\\n\"){prefix}file.write(F\""
+                    res+=F"\\n\")\n{prefix}file.write(F\""
                     # endwrite()
                 else:
                     cmd=cmd.strip()
